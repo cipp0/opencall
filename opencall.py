@@ -245,7 +245,7 @@ def tg_file(token, chat, path, caption):
 
 def send_telegram(calls, token, chat, page):
     week_ago = (date.today() - timedelta(days=7)).isoformat()
-    new = [c for c in calls if c["first_seen"] >= week_ago]
+    new = [c for c in calls if c["first_seen"] > week_ago]  # > : quelle del lunedì scorso sono già state mandate
     url = os.environ.get("PAGE_URL")  # pagina online (GitHub Pages): link invece del file allegato
     parts = [f"<b>{len(new)} nuove open call questa settimana</b>"
              + (f'\n<a href="{url}">Tutte le {len(calls)} call aperte, con i filtri</a>' if url else "")]
@@ -280,7 +280,8 @@ def main():
     if tg_cfg:
         send_telegram(calls, *tg_cfg, page)
     else:
-        webbrowser.open(page.as_uri())
+        if not os.environ.get("CI"):  # su GitHub non c'è un browser
+            webbrowser.open(page.as_uri())
 
 
 if __name__ == "__main__":

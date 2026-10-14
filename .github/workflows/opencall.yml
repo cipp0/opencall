@@ -1,9 +1,9 @@
-name: open call settimanali
+name: open call
 
 on:
   schedule:
-    - cron: "0 7 * * 1"  # lunedì 07:00 UTC = 8:00 (inverno) / 9:00 (estate) a Vienna
-  workflow_dispatch:     # pulsante "Run workflow" per lanciarlo a mano
+    - cron: "0 5 * * *"  # ogni giorno 05:00 UTC = 6:00 (inverno) / 7:00 (estate) a Vienna
+  workflow_dispatch:     # pulsante "Run workflow": lancio a mano, manda anche il Telegram
 
 permissions:
   contents: write  # per salvare opencall.db
@@ -21,11 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Scarica le call e manda il riepilogo su Telegram
+      - name: Scarica le call (Telegram solo il lunedì o a mano)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: PAGE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" python3 opencall.py --telegram
+        run: |
+          export PAGE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          if [ "$(date +%u)" = 1 ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            python3 opencall.py --telegram
+          else
+            python3 opencall.py
+          fi
 
       - name: Salva il database (serve a sapere quali call sono nuove)
         run: |
