@@ -1,4 +1,4 @@
-from opencall import SPATIAL, classify, find_deadline, funding, region
+from opencall import RULES, SPATIAL, classify, find_deadline, funding, region
 
 assert funding("Honorarium of 7,000 EUR. There is a $25 application fee") == "funded"
 assert funding("Paid by artist: Residency fee 300 euros per month") == "a pagamento"
@@ -18,5 +18,6 @@ assert not SPATIAL.search("The house is surrounded by forest")
 assert classify("Ceramic Studio Residency", "installation and sound", "TransArtists", "Finland")["relevant"] == 0
 assert classify("Residency 2027", "for painters and printmakers", "TransArtists", "Finland")["relevant"] == 0
 assert classify("Residency 2027", "interaction design and HCI installations", "TransArtists", "Finland")["relevant"] == 1
-assert classify("Lab", "a transmedia project", "On the Move", "Spain") == dict(funding="funded", region="Europa", spatial=0, relevant=1, rev=2)
+assert classify("Lab", "a transmedia project", "On the Move", "Spain") == dict(funding="funded", region="Europa", spatial=0, relevant=1, rev=RULES)
+assert classify("Residency", "for visual artists working with digital video", "On the Move", "Spain")["relevant"] == 1
 print("ok")

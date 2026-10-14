@@ -11,7 +11,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 UA = "Mozilla/5.0 (opencall personal scraper)"
 
-DISC = re.compile(r"\b(sound|audio|music|musik|musician|composer|kompon|electronic|elektron|audiovisu|audio-visu|experimental|installation|light art|lichtkunst|light design|lighting design|media art|new media|medienkunst|digital art|digitale kunst|immersive|video art|videokunst|video mapping|projection mapping|multimedia|transmedia|cross-?media|interaction design|interactive|interaktiv|hci|human[- ]computer|physical computing|creative coding|creative technolog|generative|klang|spatial|ambisonic|sonic|art (and|&) technology|arts? (and|&) science|art[- ]science|s\+t\+arts|xr|virtual reality|augmented reality|vr)", re.I)
+DISC = re.compile(r"\b(sound|audio|music|musik|musician|composer|kompon|electronic|elektron|audiovisu|audio-visu|experimental|installation|light art|lichtkunst|light design|lighting design|media art|new media|medienkunst|digital art|digitale kunst|immersive|visual|digital|video|videokunst|video mapping|projection mapping|multimedia|transmedia|cross-?media|interaction design|interactive|interaktiv|hci|human[- ]computer|physical computing|creative coding|creative technolog|generative|klang|spatial|ambisonic|sonic|art (and|&) technology|arts? (and|&) science|art[- ]science|s\+t\+arts|xr|virtual reality|augmented reality|vr)", re.I)
 # escluse se il titolo parla di queste discipline (nel testo possono comparire anche in call multidisciplinari)
 OFF = re.compile(r"ceramic|keramik|porcelain|porzellan|pottery|painting|painter|malerei|\bmaler", re.I)
 # ponytail: classificazione a parole chiave, sbaglia sui testi ambigui. Correggere le regex quando si vede un errore.
@@ -163,7 +163,7 @@ def detail(url):
     return CUT.split(t)[0]
 
 
-RULES = 2  # da aumentare quando si cambiano le regex: al giro dopo le call aperte già salvate vengono riclassificate
+RULES = 3  # da aumentare quando si cambiano le regex: al giro dopo le call aperte già salvate vengono riclassificate
 
 
 def classify(title, t, source, country):
