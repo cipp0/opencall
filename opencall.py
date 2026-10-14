@@ -21,10 +21,15 @@ FUND = re.compile(r"honorari|stipend|artist fee|\bgrants?\b|per diem|travel (cos
 MONEY = re.compile(r"€\s?\d|\d[\d.,]*\s?(€|eur\b|euro)", re.I)  # una cifra da sola può anche essere la quota da pagare
 
 SPATIAL = re.compile(r"ambisonic|spatial (audio|sound|music)|spatiali[sz]|3d[ -]?(audio|sound)|binaural|multi-?channel|wave ?field|\bwfs\b|dolby atmos|surround sound|sound ?dome|klangdom|loudspeaker (array|orchestra)|acousmonium|immersive (audio|sound)|raumklang|mehrkanal", re.I)
+CLOSED = re.compile(r"\b(call|applications?|submissions?|registrations?|entries)\s+(is\s+|are\s+|has\s+|have\s+)?(now\s+)?(been\s+)?closed\b"
+                    r"|this call (is|has) (now )?(closed|ended|expired)|no longer accepting|deadline has passed"
+                    r"|(bewerbungs|einreich)frist ist abgelaufen|ausschreibung ist (beendet|abgeschlossen|geschlossen)|bando (è )?(chiuso|scaduto)", re.I)
+CLOSED_TITLE = re.compile(r"\bclosed\b|abgelaufen|\bchiuso\b|scaduto", re.I)
 AT = re.compile(r"austria|österreich|\bwien\b|vienna|graz|\blinz\b|salzburg|innsbruck|klagenfurt|st\.? pölten|bregenz|eisenstadt", re.I)
 EU = re.compile(r"albania|andorra|armenia|belgi|bosnia|bulgari|croatia|kroatien|cyprus|zypern|czech|tschech|denmark|dänemark|estonia|estland|finland|finnland|france|frankreich|georgia|german|deutschland|greece|griechenland|hungary|ungarn|iceland|island|ireland|irland|italy|italien|kosovo|latvia|lettland|liechtenstein|lithuania|litauen|luxemb|malta|moldova|monaco|montenegro|netherlands|niederlande|holland|macedonia|norway|norwegen|poland|polen|portugal|romania|rumänien|serbia|serbien|slovakia|slowakei|slovenia|slowenien|spain|spanien|sweden|schweden|switzerland|schweiz|ukrain|united kingdom|\buk\b|england|scotland|wales|türkiye|turkey|türkei|europe|europa|berlin|hamburg|münchen|munich|cologne|köln|leipzig|paris|lyon|marseille|amsterdam|rotterdam|brussels|bruxelles|antwerp|barcelona|madrid|lisbon|lisboa|porto|milan|milano|rome|roma|turin|torino|venice|venezia|prague|praha|warsaw|kraków|krakow|ljubljana|zagreb|budapest|bratislava|london|glasgow|dublin|copenhagen|stockholm|oslo|helsinki|athens|bucharest|sofia|zürich|zurich|geneva|basel|riga|tallinn|vilnius|belgrade|beograd", re.I)
 
-MONTHS = {m: i + 1 for i, ms in enumerate(["jan", "feb", "mar mär", "apr", "may mai", "jun", "jul", "aug", "sep", "oct okt", "nov", "dec dez"]) for m in ms.split()}
+MONTHS = {m: i + 1 for i, ms in enumerate(["jan gen", "feb", "mar mär", "apr", "may mai mag", "jun giu", "jul lug", "aug ago", "sep set", "oct okt ott", "nov", "dec dez dic"]) for m in ms.split()}
+MON = r"\b(" + "|".join(MONTHS) + ")"  # solo nomi di mese veri, così "2026 MUSLAB" non diventa "26 mus"
 
 
 def get(url):
@@ -40,14 +45,14 @@ def text(h):
 
 
 def find_deadline(t):
-    """Prima data dopo 'deadline/frist/bis/until'. ISO o ''."""
-    for m in re.finditer(r"(deadline|frist|einsendeschluss|bewerbungsschluss|until|bis zum|bis|by)\W{0,3}(.{0,40})", t, re.I):
+    """Prima data dopo 'deadline/closes/frist/bis/scadenza…'. ISO o ''."""
+    for m in re.finditer(r"(deadline|closes?|closing|frist|einsendeschluss|bewerbungsschluss|einreichschluss|anmeldeschluss|until|bis zum|bis|by|scadenza|entro il|entro)\W{0,3}(.{0,50})", t, re.I):
         s = m.group(2)
         if d := re.search(r"(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})", s):
             dd, mm, yy = map(int, d.groups())
-        elif d := re.search(r"(\d{1,2})(?:st|nd|rd|th)?\.?\s+([a-zä]{3})[a-zä]*,?\s+(\d{4})", s, re.I):
+        elif d := re.search(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\.?\s+{MON}[a-zä]*\.?,?\s+(\d{{4}})", s, re.I):
             dd, mm, yy = int(d[1]), MONTHS.get(d[2].lower()), int(d[3])
-        elif d := re.search(r"([a-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})", s, re.I):
+        elif d := re.search(rf"{MON}[a-zä]*\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}})", s, re.I):
             dd, mm, yy = int(d[2]), MONTHS.get(d[1].lower()), int(d[3])
         else:
             continue
@@ -121,32 +126,48 @@ def mica():
     return out
 
 
-# siti WordPress: si cercano i post recenti con "open call"/"Ausschreibung" nel titolo. Per aggiungerne uno basta una riga.
-WP_SITES = ["starts.eu", "re-imagine-europe.eu", "www.v2.nl", "www.kupf.at", "www.musicboard-berlin.de", "www.musicexport.at"]
-CALL = re.compile(r"open call|call for|ausschreibung|stipendi|apply now|jetzt bewerben|bewerbung", re.I)
+# siti WordPress: si leggono i post degli ultimi 4 mesi con "open call"/"Ausschreibung"/"bando" nel titolo.
+# Per aggiungerne uno basta una riga.
+WP_SITES = ["starts.eu", "re-imagine-europe.eu", "www.v2.nl", "www.kupf.at", "www.musicboard-berlin.de", "www.musicexport.at",
+            "www.aimi-musica.org"]
+CALL = re.compile(r"open call|call for|\bcalls?\b|ausschreibung|stipendi|apply now|jetzt bewerben|bewerbung|bando|concorso", re.I)
+
+
+def wp_posts(host, query):
+    # ?rest_route= funziona su ogni WordPress, anche senza permalink "belli" (es. AIMI)
+    return json.loads(get(f"https://{host}/?rest_route=/wp/v2/posts&{query}&_fields=link,title,content"))
 
 
 def wordpress():
     since = (date.today() - timedelta(days=120)).isoformat()
-    out = {}
+    out = []
     for site in WP_SITES:
-        for q in ("open call", "ausschreibung", "call for"):
-            try:
-                posts = json.loads(get(f"https://{site}/wp-json/wp/v2/posts?search={urllib.parse.quote(q)}"
-                                       f"&after={since}T00:00:00&per_page=20&_fields=link,title,content"))
-            except Exception as e:
-                print(f"! {site}: {e}", file=sys.stderr)
-                break
-            for p in posts:
-                title = html.unescape(p["title"]["rendered"])
-                if CALL.search(title):
-                    t = text(p["content"]["rendered"])
-                    out[p["link"]] = dict(url=p["link"], title=title, source=site.removeprefix("www."), country="",
-                                          deadline=find_deadline(t), text=t)
+        try:
+            posts = wp_posts(site, f"after={since}T00:00:00&per_page=50")
+        except Exception as e:
+            print(f"! {site}: {e}", file=sys.stderr)
+            continue
+        for p in posts:
+            title = html.unescape(p["title"]["rendered"])
+            if CALL.search(title):
+                t = text(p["content"]["rendered"])
+                out.append(dict(url=p["link"], title=title, source=site.removeprefix("www."), country="", deadline="", text=t))
+    return out
+
+
+def sounding_future():
+    h = get("https://soundingfuture.com/whats-on?categories=open-call&limit=60")
+    out = {}
+    for card in h.split('class="grid md:grid-cols-[200px_1fr]')[1:]:  # ogni call compare due volte (layout mobile e desktop)
+        a = re.search(r'<a [^>]*href="([^"]+)"[^>]*>(.*?)<svg', card, re.S)
+        if a and ">Open Call<" in card:
+            country = re.search(r'tracking-widest">([^<:]+)</div>', card)
+            out[a[1]] = dict(url=html.unescape(a[1]), title=html.unescape(text(a[2])), source="Sounding Future",
+                             country=country[1].strip() if country else "", deadline="", text=text(card))
     return list(out.values())
 
 
-SOURCES = [on_the_move, transartists_air, transartists_board, mica, wordpress]
+SOURCES = [on_the_move, transartists_air, transartists_board, mica, wordpress, sounding_future]
 AT_SOURCES = {"mica", "kupf.at", "musicexport.at"}  # portali austriaci: se il testo non dice altro, la call è in Austria
 # testo della pagina di dettaglio: si taglia prima delle sidebar ("altre call") che falserebbero la classificazione
 CUT = re.compile(r"Share this call|Latest news|Contact information|DutchCu\|ture")
@@ -155,7 +176,8 @@ CUT = re.compile(r"Share this call|Latest news|Contact information|DutchCu\|ture
 def detail(url):
     u = urllib.parse.urlparse(url)
     if u.netloc in ("www.musicaustria.at", *WP_SITES):  # WordPress: solo il testo dell'articolo, senza menu e footer
-        posts = json.loads(get(f"https://{u.netloc}/wp-json/wp/v2/posts?slug={u.path.rstrip('/').rsplit('/', 1)[-1]}&_fields=content"))
+        post_id = urllib.parse.parse_qs(u.query).get("p")  # link tipo ?p=4153
+        posts = wp_posts(u.netloc, f"include={post_id[0]}" if post_id else f"slug={u.path.rstrip('/').rsplit('/', 1)[-1]}")
         if posts:
             return text(posts[0]["content"]["rendered"])
     h = get(url)
@@ -163,12 +185,14 @@ def detail(url):
     return CUT.split(t)[0]
 
 
-RULES = 3  # da aumentare quando si cambiano le regex: al giro dopo le call aperte già salvate vengono riclassificate
+RULES = 4  # da aumentare quando si cambiano le regex: al giro dopo le call aperte già salvate vengono riclassificate
 
 
-def classify(title, t, source, country):
+def classify(title, t, source, country, deadline=""):
     full = f"{title} {t}"
     return dict(
+        deadline=deadline or find_deadline(t),
+        closed=int(bool(CLOSED.search(t) or CLOSED_TITLE.search(title))),
         funding=funding(full, "funded" if source == "On the Move" else "non funded"),  # On the Move pubblica solo call che coprono almeno parte dei costi
         region=region(country or title, t, "Austria" if source in AT_SOURCES else "Mondo"),
         spatial=int(bool(SPATIAL.search(full))),
@@ -178,18 +202,21 @@ def classify(title, t, source, country):
 
 def scrape(db):
     today = date.today().isoformat()
-    old = db.execute("SELECT url, title, source, country FROM calls WHERE (rev IS NULL OR rev<?) AND (deadline='' OR deadline>=?)",
-                     (RULES, today)).fetchall()
-    for url, title, source, country in old:
+    # si ricontrollano le call aperte classificate con regole vecchie e, ogni giorno, quelle senza scadenza nota
+    # (la pagina può aver aggiunto la data o scritto "call closed")
+    old = db.execute("SELECT url, title, source, country, deadline FROM calls WHERE relevant IS NOT 0 AND COALESCE(closed, 0)=0 "
+                     "AND (((rev IS NULL OR rev<?) AND deadline>=?) OR (deadline='' AND first_seen>=?))",
+                     (RULES, today, (date.today() - timedelta(days=60)).isoformat())).fetchall()
+    for url, title, source, country, deadline in old:
         try:
             t = detail(url)
         except Exception:
             continue  # si riprova al prossimo giro
-        db.execute("UPDATE calls SET funding=:funding, region=:region, spatial=:spatial, relevant=:relevant, rev=:rev WHERE url=:url",
-                   dict(classify(title, t, source, country), url=url))
+        db.execute("UPDATE calls SET deadline=:deadline, closed=:closed, funding=:funding, region=:region, spatial=:spatial, "
+                   "relevant=:relevant, rev=:rev WHERE url=:url", dict(classify(title, t, source, country, deadline), url=url))
     db.commit()
     if old:
-        print(f"riclassificate {len(old)} call già salvate")
+        print(f"ricontrollate {len(old)} call già salvate")
     known = {u for (u,) in db.execute("SELECT url FROM calls")}
     for src in SOURCES:
         try:
@@ -206,13 +233,12 @@ def scrape(db):
             except Exception as e:
                 print(f"! {it['url']}: {e}", file=sys.stderr)
                 continue
-            c = classify(it["title"], t, it["source"], it["country"])
-            db.execute("INSERT INTO calls (url, title, source, country, deadline, first_seen, funding, region, spatial, relevant, rev) "
-                       "VALUES (:url, :title, :source, :country, :deadline, :first_seen, :funding, :region, :spatial, :relevant, :rev)",
-                       dict(c, url=it["url"], title=it["title"], source=it["source"], country=it["country"],
-                            deadline=it["deadline"] or find_deadline(t), first_seen=today))
+            c = classify(it["title"], t, it["source"], it["country"], it["deadline"])
+            db.execute("INSERT INTO calls (url, title, source, country, deadline, closed, first_seen, funding, region, spatial, relevant, rev) "
+                       "VALUES (:url, :title, :source, :country, :deadline, :closed, :first_seen, :funding, :region, :spatial, :relevant, :rev)",
+                       dict(c, url=it["url"], title=it["title"], source=it["source"], country=it["country"], first_seen=today))
             known.add(it["url"])
-            new += c["relevant"]
+            new += c["relevant"] and not c["closed"]
         db.commit()
         print(f"{src.__name__}: {len(items)} trovate, {new} nuove")
 
@@ -221,7 +247,7 @@ def open_calls(db):
     today = date.today().isoformat()
     # senza scadenza nota: mostrata per 60 giorni dalla prima volta che è stata vista
     stale = (date.today() - timedelta(days=60)).isoformat()
-    rows = db.execute("SELECT * FROM calls WHERE relevant=1 AND (deadline>=? OR (deadline='' AND first_seen>=?)) ORDER BY deadline='', deadline",
+    rows = db.execute("SELECT * FROM calls WHERE relevant=1 AND COALESCE(closed, 0)=0 AND (deadline>=? OR (deadline='' AND first_seen>=?)) ORDER BY deadline='', deadline",
                       (today, stale))
     cols = [d[0] for d in rows.description]
     return [dict(zip(cols, r)) for r in rows]
@@ -303,7 +329,7 @@ def main():
     print("Scarico le call (1-2 minuti)…", flush=True)
     db.execute("CREATE TABLE IF NOT EXISTS calls (url TEXT PRIMARY KEY, title, source, country, deadline, funding, region, first_seen)")
     cols = [r[1] for r in db.execute("PRAGMA table_info(calls)")]
-    for col in ("spatial", "relevant", "rev"):  # colonne aggiunte dopo: il db su GitHub va aggiornato
+    for col in ("spatial", "relevant", "rev", "closed"):  # colonne aggiunte dopo: il db su GitHub va aggiornato
         if col not in cols:
             db.execute(f"ALTER TABLE calls ADD COLUMN {col}")
     scrape(db)

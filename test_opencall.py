@@ -18,6 +18,13 @@ assert not SPATIAL.search("The house is surrounded by forest")
 assert classify("Ceramic Studio Residency", "installation and sound", "TransArtists", "Finland")["relevant"] == 0
 assert classify("Residency 2027", "for painters and printmakers", "TransArtists", "Finland")["relevant"] == 0
 assert classify("Residency 2027", "interaction design and HCI installations", "TransArtists", "Finland")["relevant"] == 1
-assert classify("Lab", "a transmedia project", "On the Move", "Spain") == dict(funding="funded", region="Europa", spatial=0, relevant=1, rev=RULES)
+assert classify("Lab", "a transmedia project", "On the Move", "Spain") == dict(deadline="", closed=0, funding="funded", region="Europa", spatial=0, relevant=1, rev=RULES)
 assert classify("Residency", "for visual artists working with digital video", "On the Move", "Spain")["relevant"] == 1
+assert find_deadline("Call closes: 30 September 2026, 23:59 CEST") == "2026-09-30"
+assert find_deadline("Deadline to apply is: Sep. 10, 2026.") == "2026-09-10"
+assert find_deadline("scadenza: 15 marzo 2027") == "2027-03-15"
+assert classify("Open Call 2026", "The call is now closed. Thanks!", "x", "")["closed"] == 1
+assert classify("[CLOSED] Residency", "", "x", "")["closed"] == 1
+assert classify("Residency", "The gallery is closed on Mondays", "x", "")["closed"] == 0
+assert find_deadline("Deadline: Jun 1, 2026 MUSLAB 2026 - KARMA") == "2026-06-01"
 print("ok")
