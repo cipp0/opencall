@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Call</title>
+<style>
+  :root { --bg:#fafaf8; --fg:#1a1a1a; --mute:#6b6b6b; --line:#e4e4e0; --acc:#3b5bdb; --chip:#efefeb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#ececec; --mute:#9a9a9a; --line:#2a2a2a; --acc:#8ea6ff; --chip:#222; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--mute); font-size:13px; margin-bottom:20px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin-bottom:16px; }
+  .group { display:flex; gap:4px; flex-wrap:wrap; }
+  button { border:1px solid var(--line); background:var(--chip); color:var(--fg); border-radius:999px; padding:5px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  button[aria-pressed=true] { background:var(--acc); border-color:var(--acc); color:#fff; }
+  input[type=search] { flex:1; min-width:180px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  label { font-size:13px; color:var(--mute); }
+  ul { list-style:none; padding:0; margin:0; }
+  li { padding:12px 0; border-top:1px solid var(--line); display:grid; grid-template-columns:92px 1fr; gap:12px; }
+  .dl { font-variant-numeric:tabular-nums; color:var(--mute); font-size:13px; padding-top:2px; }
+  .dl.soon { color:#d9480f; font-weight:600; }
+  a { color:var(--fg); text-decoration:none; font-weight:500; }
+  a:hover { color:var(--acc); }
+  .meta { font-size:12px; color:var(--mute); margin-top:2px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:999px; background:var(--chip); margin-right:4px; }
+  .tag.funded { background:#d3f9d8; color:#1b5e20; } .tag.pay { background:#ffe3e3; color:#8a1c1c; } .tag.new { background:var(--acc); color:#fff; }
+  .empty { color:var(--mute); padding:24px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Open Call · elettronica, audiovisivo, installazioni, luce</h1>
+  <div class="sub">Aggiornato {{updated}} · <span id="count"></span></div>
+  <div class="bar">
+    <div class="group" data-key="funding">
+      <button data-v="">Tutte</button><button data-v="funded">Funded</button><button data-v="non funded">Non funded</button><button data-v="a pagamento">A pagamento</button>
+    </div>
+    <div class="group" data-key="region">
+      <button data-v="">Ovunque</button><button data-v="Austria">Austria</button><button data-v="Europa">Resto d'Europa</button><button data-v="Mondo">Mondo</button>
+    </div>
+  </div>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Cerca (es. residency, sound, Wien)…">
+    <label><input type="checkbox" id="onlynew"> solo nuove (7 giorni)</label>
+  </div>
+  <ul id="list"></ul>
+</main>
+<script>
+const DATA = /*DATA*/[];
+const state = { funding: "funded", region: "" };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const soon = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
+
+function render() {
+  document.querySelectorAll(".group").forEach(g => g.querySelectorAll("button").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.v === state[g.dataset.key])));
+  const q = document.getElementById("q").value.toLowerCase(), onlyNew = document.getElementById("onlynew").checked;
+  const rows = DATA.filter(c => (!state.funding || c.funding === state.funding) && (!state.region || c.region === state.region)
+    && (!onlyNew || c.new) && (!q || (c.title + " " + c.country + " " + c.source).toLowerCase().includes(q)));
+  document.getElementById("count").textContent = `${rows.length} di ${DATA.length} call aperte`;
+  document.getElementById("list").innerHTML = rows.length ? rows.map(c => `<li>
+    <div class="dl ${c.deadline && c.deadline <= soon ? "soon" : ""}">${c.deadline ? c.deadline.split("-").reverse().join(".") : "scad. ?"}</div>
+    <div><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
+      <div class="meta">${c.new ? '<span class="tag new">nuova</span>' : ""}<span class="tag ${c.funding === "funded" ? "funded" : c.funding === "a pagamento" ? "pay" : ""}">${c.funding}</span>
+      ${esc(c.region)}${c.country ? " · " + esc(c.country) : ""} · ${esc(c.source)}</div></div></li>`).join("")
+    : '<li class="empty">Nessuna call con questi filtri.</li>';
+}
+document.querySelectorAll(".group").forEach(g => g.addEventListener("click", e => {
+  if (e.target.dataset.v !== undefined) { state[g.dataset.key] = e.target.dataset.v; render(); }
+}));
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("onlynew").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>
