@@ -11,13 +11,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 UA = "Mozilla/5.0 (opencall personal scraper)"
 
-DISC = re.compile(r"\b(sound|audio|music|musik|electronic|elektron|audiovisu|audio-visu|experiment|installation|light|licht|visual|media art|new media|medienkunst|digital|immersive|video|multimedia|interdisciplinary|cross-disciplinary|transdisciplinary|klang)", re.I)
+DISC = re.compile(r"\b(sound|audio|music|musik|musician|composer|kompon|electronic|elektron|audiovisu|audio-visu|experimental|installation|light art|lichtkunst|light design|lighting design|media art|new media|medienkunst|digital art|digitale kunst|immersive|video art|videokunst|video mapping|projection mapping|multimedia|transmedia|cross-?media|interaction design|interactive|interaktiv|hci|human[- ]computer|physical computing|creative coding|creative technolog|generative|klang|spatial|ambisonic|sonic|art (and|&) technology|arts? (and|&) science|art[- ]science|s\+t\+arts|xr|virtual reality|augmented reality|vr)", re.I)
+# escluse se il titolo parla di queste discipline (nel testo possono comparire anche in call multidisciplinari)
+OFF = re.compile(r"ceramic|keramik|porcelain|porzellan|pottery|painting|painter|malerei|\bmaler", re.I)
 # ponytail: classificazione a parole chiave, sbaglia sui testi ambigui. Correggere le regex quando si vede un errore.
 NOPAY = re.compile(r"\b(no|without|free of)\s+(application\s+|entry\s+|submission\s+|participation\s+)?(fees?|charges?)\b|free of charge|kostenlos|gebührenfrei|keine (teilnahme|einreich)gebühr", re.I)
 PAY = re.compile(r"application fee|entry fee|submission fee|participation fee|registration fee|residency fee|paid by artist|teilnahmegebühr|einreichgebühr|anmeldegebühr", re.I)
 FUND = re.compile(r"honorari|stipend|artist fee|\bgrants?\b|per diem|travel (costs|expenses)|production (budget|costs|support)|budget (of|is available)|fully funded|paid residency|prize money|preisgeld|dotiert|honorar|reisekosten", re.I)
 MONEY = re.compile(r"€\s?\d|\d[\d.,]*\s?(€|eur\b|euro)", re.I)  # una cifra da sola può anche essere la quota da pagare
 
+SPATIAL = re.compile(r"ambisonic|spatial (audio|sound|music)|spatiali[sz]|3d[ -]?(audio|sound)|binaural|multi-?channel|wave ?field|\bwfs\b|dolby atmos|surround sound|sound ?dome|klangdom|loudspeaker (array|orchestra)|acousmonium|immersive (audio|sound)|raumklang|mehrkanal", re.I)
 AT = re.compile(r"austria|österreich|\bwien\b|vienna|graz|\blinz\b|salzburg|innsbruck|klagenfurt|st\.? pölten|bregenz|eisenstadt", re.I)
 EU = re.compile(r"albania|andorra|armenia|belgi|bosnia|bulgari|croatia|kroatien|cyprus|zypern|czech|tschech|denmark|dänemark|estonia|estland|finland|finnland|france|frankreich|georgia|german|deutschland|greece|griechenland|hungary|ungarn|iceland|island|ireland|irland|italy|italien|kosovo|latvia|lettland|liechtenstein|lithuania|litauen|luxemb|malta|moldova|monaco|montenegro|netherlands|niederlande|holland|macedonia|norway|norwegen|poland|polen|portugal|romania|rumänien|serbia|serbien|slovakia|slowakei|slovenia|slowenien|spain|spanien|sweden|schweden|switzerland|schweiz|ukrain|united kingdom|\buk\b|england|scotland|wales|türkiye|turkey|türkei|europe|europa|berlin|hamburg|münchen|munich|cologne|köln|leipzig|paris|lyon|marseille|amsterdam|rotterdam|brussels|bruxelles|antwerp|barcelona|madrid|lisbon|lisboa|porto|milan|milano|rome|roma|turin|torino|venice|venezia|prague|praha|warsaw|kraków|krakow|ljubljana|zagreb|budapest|bratislava|london|glasgow|dublin|copenhagen|stockholm|oslo|helsinki|athens|bucharest|sofia|zürich|zurich|geneva|basel|riga|tallinn|vilnius|belgrade|beograd", re.I)
 
@@ -150,12 +153,43 @@ CUT = re.compile(r"Share this call|Latest news|Contact information|DutchCu\|ture
 
 
 def detail(url):
+    u = urllib.parse.urlparse(url)
+    if u.netloc in ("www.musicaustria.at", *WP_SITES):  # WordPress: solo il testo dell'articolo, senza menu e footer
+        posts = json.loads(get(f"https://{u.netloc}/wp-json/wp/v2/posts?slug={u.path.rstrip('/').rsplit('/', 1)[-1]}&_fields=content"))
+        if posts:
+            return text(posts[0]["content"]["rendered"])
     h = get(url)
-    t = text(h[h.find("<main"):])
+    t = text(h[max(h.find("<main"), 0):])
     return CUT.split(t)[0]
 
 
+RULES = 2  # da aumentare quando si cambiano le regex: al giro dopo le call aperte già salvate vengono riclassificate
+
+
+def classify(title, t, source, country):
+    full = f"{title} {t}"
+    return dict(
+        funding=funding(full, "funded" if source == "On the Move" else "non funded"),  # On the Move pubblica solo call che coprono almeno parte dei costi
+        region=region(country or title, t, "Austria" if source in AT_SOURCES else "Mondo"),
+        spatial=int(bool(SPATIAL.search(full))),
+        relevant=int(bool(DISC.search(full)) and not OFF.search(title)),  # le non pertinenti restano nel db per non riscaricarle
+        rev=RULES)
+
+
 def scrape(db):
+    today = date.today().isoformat()
+    old = db.execute("SELECT url, title, source, country FROM calls WHERE (rev IS NULL OR rev<?) AND (deadline='' OR deadline>=?)",
+                     (RULES, today)).fetchall()
+    for url, title, source, country in old:
+        try:
+            t = detail(url)
+        except Exception:
+            continue  # si riprova al prossimo giro
+        db.execute("UPDATE calls SET funding=:funding, region=:region, spatial=:spatial, relevant=:relevant, rev=:rev WHERE url=:url",
+                   dict(classify(title, t, source, country), url=url))
+    db.commit()
+    if old:
+        print(f"riclassificate {len(old)} call già salvate")
     known = {u for (u,) in db.execute("SELECT url FROM calls")}
     for src in SOURCES:
         try:
@@ -172,18 +206,13 @@ def scrape(db):
             except Exception as e:
                 print(f"! {it['url']}: {e}", file=sys.stderr)
                 continue
-            full = f"{it['title']} {t}"
-            if not DISC.search(full):
-                continue
-            # On the Move pubblica solo call che coprono almeno parte dei costi
-            default = "funded" if it["source"] == "On the Move" else "non funded"
-            db.execute("INSERT INTO calls VALUES (?,?,?,?,?,?,?,?)", (
-                it["url"], it["title"], it["source"], it["country"],
-                it["deadline"] or find_deadline(t), funding(full, default),
-                region(it["country"] or it["title"], t, "Austria" if it["source"] in AT_SOURCES else "Mondo"),
-                date.today().isoformat()))
+            c = classify(it["title"], t, it["source"], it["country"])
+            db.execute("INSERT INTO calls (url, title, source, country, deadline, first_seen, funding, region, spatial, relevant, rev) "
+                       "VALUES (:url, :title, :source, :country, :deadline, :first_seen, :funding, :region, :spatial, :relevant, :rev)",
+                       dict(c, url=it["url"], title=it["title"], source=it["source"], country=it["country"],
+                            deadline=it["deadline"] or find_deadline(t), first_seen=today))
             known.add(it["url"])
-            new += 1
+            new += c["relevant"]
         db.commit()
         print(f"{src.__name__}: {len(items)} trovate, {new} nuove")
 
@@ -192,7 +221,7 @@ def open_calls(db):
     today = date.today().isoformat()
     # senza scadenza nota: mostrata per 60 giorni dalla prima volta che è stata vista
     stale = (date.today() - timedelta(days=60)).isoformat()
-    rows = db.execute("SELECT * FROM calls WHERE deadline>=? OR (deadline='' AND first_seen>=?) ORDER BY deadline='', deadline",
+    rows = db.execute("SELECT * FROM calls WHERE relevant=1 AND (deadline>=? OR (deadline='' AND first_seen>=?)) ORDER BY deadline='', deadline",
                       (today, stale))
     cols = [d[0] for d in rows.description]
     return [dict(zip(cols, r)) for r in rows]
@@ -273,6 +302,10 @@ def main():
     db = sqlite3.connect(HERE / "opencall.db")
     print("Scarico le call (1-2 minuti)…", flush=True)
     db.execute("CREATE TABLE IF NOT EXISTS calls (url TEXT PRIMARY KEY, title, source, country, deadline, funding, region, first_seen)")
+    cols = [r[1] for r in db.execute("PRAGMA table_info(calls)")]
+    for col in ("spatial", "relevant", "rev"):  # colonne aggiunte dopo: il db su GitHub va aggiornato
+        if col not in cols:
+            db.execute(f"ALTER TABLE calls ADD COLUMN {col}")
     scrape(db)
     calls = open_calls(db)
     page = build_page(calls)

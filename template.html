@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,25 +25,26 @@
   a:hover { color:var(--acc); }
   .meta { font-size:12px; color:var(--mute); margin-top:2px; }
   .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:999px; background:var(--chip); margin-right:4px; }
-  .tag.funded { background:#d3f9d8; color:#1b5e20; } .tag.pay { background:#ffe3e3; color:#8a1c1c; } .tag.new { background:var(--acc); color:#fff; }
+  .tag.funded { background:#d3f9d8; color:#1b5e20; } .tag.pay { background:#ffe3e3; color:#8a1c1c; } .tag.new { background:var(--acc); color:#fff; } .tag.spatial { background:#e5dbff; color:#4c2a9e; }
   .empty { color:var(--mute); padding:24px 0; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Open Call · elettronica, audiovisivo, installazioni, luce</h1>
-  <div class="sub">Aggiornato {{updated}} · <span id="count"></span></div>
+  <h1>Open Calls · electronic music, audiovisual, installation, light</h1>
+  <div class="sub">Updated {{updated}} · <span id="count"></span></div>
   <div class="bar">
     <div class="group" data-key="funding">
-      <button data-v="">Tutte</button><button data-v="funded">Funded</button><button data-v="non funded">Non funded</button><button data-v="a pagamento">A pagamento</button>
+      <button data-v="">All</button><button data-v="funded">Funded</button><button data-v="non funded">Not funded</button><button data-v="a pagamento">Fee to apply</button>
     </div>
     <div class="group" data-key="region">
-      <button data-v="">Ovunque</button><button data-v="Austria">Austria</button><button data-v="Europa">Resto d'Europa</button><button data-v="Mondo">Mondo</button>
+      <button data-v="">Anywhere</button><button data-v="Austria">Austria</button><button data-v="Europa">Rest of Europe</button><button data-v="Mondo">Rest of world</button>
     </div>
   </div>
   <div class="bar">
-    <input type="search" id="q" placeholder="Cerca (es. residency, sound, Wien)…">
-    <label><input type="checkbox" id="onlynew"> solo nuove (7 giorni)</label>
+    <input type="search" id="q" placeholder="Search (e.g. residency, sound, Vienna)…">
+    <label><input type="checkbox" id="spatial"> 3D / spatial audio</label>
+    <label><input type="checkbox" id="onlynew"> new only (7 days)</label>
   </div>
   <ul id="list"></ul>
 </main>
@@ -51,27 +52,31 @@
 const DATA = /*DATA*/[];
 const state = { funding: "funded", region: "" };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// i valori nel database restano in italiano, qui solo le etichette
+const LABEL = { "funded": "funded", "non funded": "not funded", "a pagamento": "fee to apply", "Austria": "Austria", "Europa": "Europe", "Mondo": "Rest of world" };
 const soon = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
 
 function render() {
   document.querySelectorAll(".group").forEach(g => g.querySelectorAll("button").forEach(b =>
     b.setAttribute("aria-pressed", b.dataset.v === state[g.dataset.key])));
-  const q = document.getElementById("q").value.toLowerCase(), onlyNew = document.getElementById("onlynew").checked;
+  const q = document.getElementById("q").value.toLowerCase(), onlyNew = document.getElementById("onlynew").checked,
+    spatial = document.getElementById("spatial").checked;
   const rows = DATA.filter(c => (!state.funding || c.funding === state.funding) && (!state.region || c.region === state.region)
-    && (!onlyNew || c.new) && (!q || (c.title + " " + c.country + " " + c.source).toLowerCase().includes(q)));
-  document.getElementById("count").textContent = `${rows.length} di ${DATA.length} call aperte`;
+    && (!onlyNew || c.new) && (!spatial || c.spatial) && (!q || (c.title + " " + c.country + " " + c.source).toLowerCase().includes(q)));
+  document.getElementById("count").textContent = `${rows.length} of ${DATA.length} open calls`;
   document.getElementById("list").innerHTML = rows.length ? rows.map(c => `<li>
-    <div class="dl ${c.deadline && c.deadline <= soon ? "soon" : ""}">${c.deadline ? c.deadline.split("-").reverse().join(".") : "scad. ?"}</div>
+    <div class="dl ${c.deadline && c.deadline <= soon ? "soon" : ""}">${c.deadline ? c.deadline.split("-").reverse().join(".") : "deadline ?"}</div>
     <div><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
-      <div class="meta">${c.new ? '<span class="tag new">nuova</span>' : ""}<span class="tag ${c.funding === "funded" ? "funded" : c.funding === "a pagamento" ? "pay" : ""}">${c.funding}</span>
-      ${esc(c.region)}${c.country ? " · " + esc(c.country) : ""} · ${esc(c.source)}</div></div></li>`).join("")
-    : '<li class="empty">Nessuna call con questi filtri.</li>';
+      <div class="meta">${c.new ? '<span class="tag new">new</span>' : ""}${c.spatial ? '<span class="tag spatial">3D audio</span>' : ""}<span class="tag ${c.funding === "funded" ? "funded" : c.funding === "a pagamento" ? "pay" : ""}">${LABEL[c.funding]}</span>
+      ${LABEL[c.region]}${c.country ? " · " + esc(c.country) : ""} · ${esc(c.source)}</div></div></li>`).join("")
+    : '<li class="empty">No calls match these filters.</li>';
 }
 document.querySelectorAll(".group").forEach(g => g.addEventListener("click", e => {
   if (e.target.dataset.v !== undefined) { state[g.dataset.key] = e.target.dataset.v; render(); }
 }));
 document.getElementById("q").addEventListener("input", render);
 document.getElementById("onlynew").addEventListener("change", render);
+document.getElementById("spatial").addEventListener("change", render);
 render();
 </script>
 </body>
